@@ -13,18 +13,29 @@
 #include "data.h"
 #include "initialize.h"
 
+#define WITH_MUT(MUT, CODE...) \
+do {						   \
+	pthread_mutex_lock(MUT);   \
+	do {CODE} while (false);   \
+	pthread_mutex_unlock(MUT); \
+} while (false);
+
+// #define DEBUG
+
 const double RENDER_FRAMERATE = 50.0; // At most 10 * timeinterval * framerate frames will be saved by the code for interpolation.
 const double COLLISION_THRESHOLD = 1.0/5.0;
 
-int apply_force(Spring spring, Data *data) {
+int apply_force(Spring spring, double *accelerations) {
     if (spring.inert) {
         return 0;
     }
     Mass *p1 = spring.p1, *p2 = spring.p2;
+	#ifdef DEBUG
     if (p1->parent_i != p2->parent_i) {
         fprintf(stderr, "\nspring %lu has points %lu and %lu in different objects %lu and %lu\n", spring.i, p1->i, p2->i, p1->parent_i, p2->parent_i);
         return 1;
     }
+	#endif
     double diff[DIMS];
     //#define PROPER_FRICTION
     #ifdef PROPER_FRICTION
@@ -59,14 +70,16 @@ int apply_force(Spring spring, Data *data) {
         double unit_d = diff[d] / dist;
         double v_diff_d = p2->vel[d] - p1->vel[d];
         double F_d = - unit_d * deflection * spring.k - v_diff_d * spring.f;
-        data->accelerations[p1->i * DIMS + d] -= F_d * p1->mobile / p1->m;
-        data->accelerations[p2->i * DIMS + d] += F_d * p2->mobile / p2->m;
+        accelerations[p1->i * DIMS + d] -= F_d * p1->mobile / p1->m;
+        accelerations[p2->i * DIMS + d] += F_d * p2->mobile / p2->m;
     }
     #endif
+	#ifdef DEBUG
     if (isnan(p1->a[0])) {
         fprintf(stderr, "\nspring: %lu %d %.2f %.2f %.2f\n", p1->i, p1->type, p1->a[0], p1->a[1], p1->a[2]);
         return 3;
     }
+	#endif
     return 0;
 }
 
@@ -120,9 +133,11 @@ void collide(Mass *self, Mass *others, size_t n_others) {
             }
         }
     }
+	#ifdef DEBUG
     if (isnan(self->a[0])) {
         fprintf(stderr, "\n%lu %d %.2f %.2f %.2f", self->i, self->type, self->a[0], self->a[1], self->a[2]);
     }
+	#endif
 }
 
 void collide_set(Mass *self, void *others, double collision_threshold, Data *data) {
@@ -178,26 +193,13 @@ void collide_set(Mass *self, void *others, double collision_threshold, Data *dat
     kd_res_free(others);
 }
 
-void initial_state(double* out, int y_size, Data *data) {
-    #if false//!defined(NO_OBJECTS)
-    size_t writer = 0;
-    for (size_t o = 0; o < n_objects; o++) {
-        for (size_t i = 0; i < objects[o].n_masses; i++) {
-            for (size_t d = 0; d < DIMS; d++) {
-                out[writer] = objects[o].masses[i].pos[d];
-                out[n_masses * DIMS + writer++] = objects[o].masses[i].vel[d];
-            }
-        }
-    }
-    #else
-    (void) y_size;
+void initial_state(double* out, Data *data) {
     for (size_t i = 0; i < data->n_masses; i++) {
         for (size_t d = 0; d < DIMS; d++) {
             out[i * DIMS + d] = data->masses[i]->pos[d];
             out[(data->n_masses + i) * DIMS + d] = data->masses[i]->vel[d];
         }
     }
-    #endif
     fprintf(stderr, "compiled initial state\n");
 }
 
@@ -225,12 +227,6 @@ err_code_t deriv(double t, double *y, size_t y_size, double *out, void *_data) {
             }
         }
     }
-    int spring_err;
-    for (size_t i = 0; i < data->n_springs; i++) {
-        if ((spring_err = apply_force(data->springs[i], data))) {
-            return spring_err;
-        }
-    }
     for (size_t o1 = 0; o1 < data->n_objects; o1++) {
         Object *obj1 = &data->objects[o1];
         /*for (size_t i = 0; i < obj1->n_springs; i++) {
@@ -254,6 +250,18 @@ err_code_t deriv(double t, double *y, size_t y_size, double *out, void *_data) {
             kd_free(data->objects[o].kd);
         }
     }
+
+	// signal worker threads to start
+	WITH_MUT(&data->mut, data->signal = NUM_THREADS * 2;)
+	pthread_cond_broadcast(&data->cond_springs);
+
+	// wait for threads to finish
+	WITH_MUT(&data->mut,
+		while (data->signal != 0) {
+			pthread_cond_wait(&data->cond_done, &data->mut);
+		}
+	)
+
     memcpy(out, vels, vel_offset * sizeof(double));
     return 0;
 }
@@ -284,6 +292,109 @@ void save_data(double** solved, size_t frames, size_t y_size, double delta_t, Da
     fclose(out);
 }
 
+typedef struct {
+	Data *data;
+	size_t id;
+	size_t accel_size;
+} worker_arg_t;
+
+static inline void id_segment(size_t size, size_t id, size_t *start, size_t *end) {
+	*start = size * id / NUM_THREADS;
+	*end = size * (id + 1) / NUM_THREADS;
+}
+
+void *thread_worker(void *arg) {
+	Data *data = ((worker_arg_t *) arg)->data;
+	size_t id = ((worker_arg_t *) arg)->id;
+	size_t accel_size = ((worker_arg_t *) arg)->accel_size;
+
+	size_t start_springs, end_springs;
+	id_segment(data->n_springs, id, &start_springs, &end_springs);
+
+	size_t start_masses, end_masses;
+	id_segment(accel_size, id, &start_masses, &end_masses);
+
+	free(arg);
+	while (true) {
+		// wait for the start of a derive
+		WITH_MUT(&data->mut,
+			while (data->signal <= NUM_THREADS) {
+				pthread_cond_wait(&data->cond_springs, &data->mut);
+			}
+			if (data->signal >= SIZE_MAX - 2 * NUM_THREADS) {
+				pthread_mutex_unlock(&data->mut);
+				return NULL;
+			}
+		)
+
+		// apply force for strings belonging to this thread
+		for (size_t i = start_springs; i < end_springs; i++) {
+			if (apply_force(data->springs[i], data->thread_accelerations[id])) {
+				exit(1);
+			}
+		}
+
+		// indicate completion
+		WITH_MUT(&data->mut, data->signal--;)
+		pthread_cond_broadcast(&data->cond_masses);
+
+		// wait for all threads to be done
+		WITH_MUT(&data->mut,
+			while (data->signal > NUM_THREADS) {
+				pthread_cond_wait(&data->cond_masses, &data->mut);
+			}
+		)
+
+		// tally up accelerations for each thread into main acceleration for thread's
+		// segment of masses
+		for (size_t tid = 0; tid < NUM_THREADS; tid++) {
+			for (size_t i = start_masses; i < end_masses; i++) {
+				data->accelerations[i] += data->thread_accelerations[tid][i];
+			}
+			memset(&data->thread_accelerations[tid][start_masses], 0,
+				   (end_masses - start_masses) * sizeof(double));
+		}
+
+		// indicate completion
+		WITH_MUT(&data->mut, data->signal--;)
+		pthread_cond_signal(&data->cond_done);
+	}
+}
+
+void thread_init(Data *data, size_t y_size) {
+    pthread_cond_init(&data->cond_springs, NULL);
+    pthread_cond_init(&data->cond_done, NULL);
+    pthread_cond_init(&data->cond_masses, NULL);
+    pthread_mutex_init(&data->mut, NULL);
+
+	for (size_t i = 0; i < NUM_THREADS; i++) {
+		data->thread_accelerations[i] = calloc(sizeof(double), y_size);
+	}
+
+    for (size_t i = 0; i < NUM_THREADS; i++) {
+		worker_arg_t *worker_arg = malloc(sizeof(worker_arg_t));
+		worker_arg->data = data;
+		worker_arg->id = i;
+		worker_arg->accel_size = y_size / 2;
+		pthread_create(&data->threads[i], NULL, thread_worker, worker_arg);
+    }
+}
+
+void thread_destroy(Data *data) {
+	WITH_MUT(&data->mut, data->signal = SIZE_MAX;)
+	pthread_cond_broadcast(&data->cond_springs);
+	pthread_cond_broadcast(&data->cond_masses);
+	fprintf(stderr, "Joined:");
+	for (size_t i = 0; i < NUM_THREADS; i++) {
+		pthread_join(data->threads[i], NULL);
+		fprintf(stderr, " %lu", i);
+	}
+	fprintf(stderr, "\n");
+	for (size_t i = 0; i < NUM_THREADS; i++) {
+		free(data->thread_accelerations[i]);
+	}
+}
+
 int main() {
     Data data;
 
@@ -296,10 +407,11 @@ int main() {
     const size_t save_limit = RENDER_FRAMERATE * delta_t * 10;
 
     double* state_0 = malloc(y_size * sizeof(double));
-    initial_state(state_0, y_size, &data);
+    initial_state(state_0, &data);
+	thread_init(&data, y_size);
 
-    // fprintf(stderr, "n_objects: %lu | n_masses: %lu | n_points: %lu | n_spheres: %lu | n_springs: %lu\n",
-    //                                    data.n_objects,data.n_masses,data.n_points,data.n_spheres,data.n_springs);
+    fprintf(stderr, "n_objects: %lu | n_masses: %lu | n_points: %lu | n_spheres: %lu | n_springs: %lu\n",
+                                       data.n_objects,data.n_masses,data.n_points,data.n_spheres,data.n_springs);
 
     double** solved = malloc(save_limit * sizeof(double*));
     for (size_t i = 0; i < save_limit; i++) {
@@ -318,7 +430,7 @@ int main() {
         .save_limit = save_limit,
         .save_count = 0,
         .saved = solved,
-        .progress = false
+        .progress = true
     };
 
     // run the solver
@@ -334,6 +446,8 @@ int main() {
 
     save_data(solved, frames, y_size, delta_t, &data);
     fprintf(stderr, "saved\n");
+
+	thread_destroy(&data);
 
     // free resources
     for (size_t i = 0; i < save_limit; i++) {

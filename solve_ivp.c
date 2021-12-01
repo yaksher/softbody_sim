@@ -6,13 +6,15 @@
 #include <time.h>
 #include "vec_funcs.h"
 
-#define MIN_FACTOR 0.2
-#define MAX_FACTOR 10
-#define MAX_STEP 0.1
-#define MIN_STEP 0.0009765625
-#define SAFETY 0.9
-#define ORDER 4
+const double MIN_FACTOR = 0.2;
+const double MAX_FACTOR = 10;
+const double MAX_STEP = 0.1;
+const double MIN_STEP = 0.0009765625;
+const double MIN_STEP_FPE_MARGIN = 1 + 1e-3;
+const double SAFETY = 0.9;
+const double ORDER = 4;
 #define ERROR_ORDER 5
+const double ERROR_EXP = -1.0 / (ERROR_ORDER + 1);
 
 
 err_code_t solve_ivp(deriv_t deriv, ivp_params_t *ivp, solver_params_t *solver, void *data) {
@@ -36,7 +38,6 @@ err_code_t solve_ivp(deriv_t deriv, ivp_params_t *ivp, solver_params_t *solver, 
     double rtol = 1E-3;
     double atol = 1E-6;
     int direction = sign(tf - t0);
-    double error_exponent = -1.0 / (ERROR_ORDER + 1);
 
     double f0[y_size];
     err_code_t err_code;
@@ -119,13 +120,13 @@ err_code_t solve_ivp(deriv_t deriv, ivp_params_t *ivp, solver_params_t *solver, 
 
     while (direction * (t - tf) < 0) {
         h_abs = max(min_step, h_abs);
-        if (progress) {
-            clock_gettime(CLOCK_MONOTONIC, &finish);
-            double elapsed = (finish.tv_sec - start.tv_sec);
-            elapsed += (finish.tv_nsec - start.tv_nsec) / 1E9;
-            printf("\r%.2f / %.2f | run : %.2fs | left : %.2fs | step : %.2e | %lu", t, tf, elapsed, (tf/t - 1) * elapsed, h_abs, real_steps);
-            fflush(stdout);
-        }
+        // if (progress) {
+        //     clock_gettime(CLOCK_MONOTONIC, &finish);
+        //     double elapsed = (finish.tv_sec - start.tv_sec);
+        //     elapsed += (finish.tv_nsec - start.tv_nsec) / 1E9;
+        //     printf("\r%.2f / %.2f | run : %.2fs | left : %.2fs | step : %.2e | %lu", t, tf, elapsed, (tf/t - 1) * elapsed, h_abs, real_steps);
+        //     fflush(stdout);
+        // }
         bool step_accepted = false;
         bool step_rejected = false;
         while (!step_accepted) {
@@ -154,6 +155,9 @@ err_code_t solve_ivp(deriv_t deriv, ivp_params_t *ivp, solver_params_t *solver, 
                     ydy[i] = y[i] + dy[i] * h;
                 }
                 if ((err_code = deriv(t + c * h, ydy, y_size, K[s], data))) {
+                    for (size_t i = 1; i < n_stages; i++) {
+                        free(K[i]);
+                    }
                     return err_code;
                 }
             }
@@ -163,6 +167,9 @@ err_code_t solve_ivp(deriv_t deriv, ivp_params_t *ivp, solver_params_t *solver, 
                 y_new[i] = y[i] + h * y_delta[i];
             }
             if ((err_code = deriv(t + h, y_new, y_size, f_new, data))) {
+                for (size_t i = 1; i < n_stages; i++) {
+                    free(K[i]);
+                }
                 return err_code;
             }
             double K_err[y_size];
@@ -183,12 +190,12 @@ err_code_t solve_ivp(deriv_t deriv, ivp_params_t *ivp, solver_params_t *solver, 
                 }
                 return 3;
             }
-            if (error_norm < 1 || h_abs == MIN_STEP) {
+            if (error_norm < 1 || h_abs <= MIN_STEP * MIN_STEP_FPE_MARGIN) {
                 double factor;
                 if (error_norm == 0) {
                     factor = MAX_FACTOR;
                 } else {
-                    factor = min(MAX_FACTOR, SAFETY * pow(error_norm, error_exponent));
+                    factor = min(MAX_FACTOR, SAFETY * pow(error_norm, ERROR_EXP));
                 }
 
                 if (step_rejected) {
@@ -196,10 +203,17 @@ err_code_t solve_ivp(deriv_t deriv, ivp_params_t *ivp, solver_params_t *solver, 
                 }
                 h_abs *= factor;
                 step_accepted = true;
-
             } else {
-                h_abs *= max(MIN_FACTOR, SAFETY * pow(error_norm, error_exponent));
+                h_abs *= max(MIN_FACTOR, SAFETY * pow(error_norm, ERROR_EXP));
                 step_rejected = true;
+            }
+
+            if (progress) {
+                clock_gettime(CLOCK_MONOTONIC, &finish);
+                double elapsed = (finish.tv_sec - start.tv_sec);
+                elapsed += (finish.tv_nsec - start.tv_nsec) / 1E9;
+                printf("\r%.2f / %.2f | run : %.2fs | left : %.2fs | step : %.2e | err : %.2e | %d | %d | %lu", t, tf, elapsed, (tf/t - 1) * elapsed, h_abs, error_norm, step_accepted, step_rejected, real_steps);
+                fflush(stdout);
             }
         }
         if (step_count < save_limit && direction * (t_new - saved[step_count-1][y_size]) > save_interval) {

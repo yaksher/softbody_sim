@@ -30,6 +30,14 @@ typedef struct Data {
 
     double *accelerations;
 
+    pthread_t threads[NUM_THREADS];
+    double *thread_accelerations[NUM_THREADS];
+    pthread_cond_t cond_springs;
+    pthread_cond_t cond_done;
+    pthread_cond_t cond_masses;
+    pthread_mutex_t mut;
+    size_t signal;
+
     size_t mass_i;
     size_t obj_i;
     size_t spring_i;

@@ -57,10 +57,11 @@ void flatten_springs(Data *data) {
   }
 }
 
-//#define SPRING_BOARD
-//#define BLOCK_DROP
-//#define POOL
+// #define SPRING_BOARD
+// #define BLOCK_DROP
+// #define POOL
 #define BOX_ON_BOX
+// #define ONE_BOX
 #if defined(BLOCK_DROP)
 #define NO_OBJECTS
 int populate_objects(Data *data) {
@@ -253,6 +254,30 @@ size_t populate_objects(Data *data) {
   );
   data->n_masses = data->objects[0].n_masses + data->objects[1].n_masses;
   data->n_springs = data->objects[0].n_springs + data->objects[1].n_springs;
+  data->n_points = data->n_masses;
+  printf("populated objects\n");
+  //flatten_springs();
+  flatten_objects(data);
+  return data->n_masses * DIMS * 2;
+}
+#elif defined(ONE_BOX)
+size_t populate_objects(Data *data) {
+  printf("Creating objects\n");
+  double k = 3000;
+  double f = 0.05;
+  double r = 0.7;
+  data->n_objects = 1;
+  data->objects = malloc(data->n_objects * sizeof(Object));
+  data->objects[0] = mk_Box(data,
+    -4, -4, 0, 16, 4, 4,
+    21, 9, 5,
+    5, k, f, r,
+    (Faces) {false, true, false, false, false, false},
+    (Faces) {false, false, false, false, false, false},
+    0, 0, 1
+  );
+  data->n_masses = data->objects[0].n_masses;
+  data->n_springs = data->objects[0].n_springs;
   data->n_points = data->n_masses;
   printf("populated objects\n");
   //flatten_springs();
