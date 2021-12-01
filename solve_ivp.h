@@ -11,12 +11,16 @@ void print_arr2d(double** arr, int s1, int s2);
 
 typedef int err_code_t;
 
+typedef err_code_t (*deriv_t)(double t, double *y, size_t y_size, double *out, void *data);
+
 typedef struct {
+    deriv_t deriv;
+    void *data;
     double *y0;
     size_t y_size;
     double t0;
     double tf;
-} ivp_params_t;
+} ivp_t;
 
 typedef struct {
     size_t save_limit;
@@ -25,6 +29,4 @@ typedef struct {
     bool progress;
 } solver_params_t;
 
-typedef err_code_t (*deriv_t)(double t, double *y, size_t y_size, double *out, void *data);
-
-err_code_t solve_ivp(deriv_t deriv, ivp_params_t *ivp, solver_params_t *solver, void *data);
+err_code_t solve_ivp(ivp_t *ivp, solver_params_t *solver);

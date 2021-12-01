@@ -356,8 +356,12 @@ void *thread_worker(void *arg) {
 		}
 
 		// indicate completion
-		WITH_MUT(&data->mut, data->signal--;)
-		pthread_cond_signal(&data->cond_done);
+		WITH_MUT(&data->mut,
+			data->signal--;
+			if (data->signal == 0) {
+				pthread_cond_signal(&data->cond_done);
+			}
+		)
 	}
 }
 
@@ -420,7 +424,9 @@ int main() {
 
     fprintf(stderr, "beginning integration\n");
 
-    ivp_params_t ivp = (ivp_params_t) {
+    ivp_t ivp = (ivp_t) {
+		.deriv = deriv,
+		.data = &data,
         .y0 = state_0,
         .y_size = y_size,
         .t0 = t0,
@@ -430,11 +436,11 @@ int main() {
         .save_limit = save_limit,
         .save_count = 0,
         .saved = solved,
-        .progress = true
+        .progress = false
     };
 
     // run the solver
-    if (solve_ivp(deriv, &ivp, &solver, &data)) {
+    if (solve_ivp(&ivp, &solver)) {
         fprintf(stderr, "solve_ivp failed\n");
         return 1;
     }

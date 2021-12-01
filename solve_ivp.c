@@ -17,16 +17,19 @@ const double ORDER = 4;
 const double ERROR_EXP = -1.0 / (ERROR_ORDER + 1);
 
 
-err_code_t solve_ivp(deriv_t deriv, ivp_params_t *ivp, solver_params_t *solver, void *data) {
+err_code_t solve_ivp(ivp_t *ivp, solver_params_t *solver) {
 // int solve_ivp(deriv_t deriv, double* y0, int y_size, double t0, double tf, int save_limit, double** saved, bool progress, void *data) {
     /* Roughly equivalent to scipy.integrate.solve_ivp using rk45 solver, but
      * with significantly less customization, debug, and robustness.
      * Returns an array of y value arrays concatenated with time_stamp for every
      * step taken. Truncates at save_limit.
      */
-	// unpack ivp params
+	// unpack ivp
+    deriv_t deriv = ivp->deriv;
+    void *data = ivp->data;
 	double t0 = ivp->t0, tf = ivp->tf, *y0 = ivp->y0;
 	size_t y_size = ivp->y_size;
+
 	// unpack solver params
 	size_t save_limit = solver->save_limit;
 	double **saved = solver->saved;
@@ -120,13 +123,13 @@ err_code_t solve_ivp(deriv_t deriv, ivp_params_t *ivp, solver_params_t *solver, 
 
     while (direction * (t - tf) < 0) {
         h_abs = max(min_step, h_abs);
-        // if (progress) {
-        //     clock_gettime(CLOCK_MONOTONIC, &finish);
-        //     double elapsed = (finish.tv_sec - start.tv_sec);
-        //     elapsed += (finish.tv_nsec - start.tv_nsec) / 1E9;
-        //     printf("\r%.2f / %.2f | run : %.2fs | left : %.2fs | step : %.2e | %lu", t, tf, elapsed, (tf/t - 1) * elapsed, h_abs, real_steps);
-        //     fflush(stdout);
-        // }
+        if (progress) {
+            clock_gettime(CLOCK_MONOTONIC, &finish);
+            double elapsed = (finish.tv_sec - start.tv_sec);
+            elapsed += (finish.tv_nsec - start.tv_nsec) / 1E9;
+            printf("\r%.2f / %.2f | run : %.2fs | left : %.2fs | step : %.2e | %lu", t, tf, elapsed, (tf/t - 1) * elapsed, h_abs, real_steps);
+            fflush(stdout);
+        }
         bool step_accepted = false;
         bool step_rejected = false;
         while (!step_accepted) {
@@ -206,14 +209,6 @@ err_code_t solve_ivp(deriv_t deriv, ivp_params_t *ivp, solver_params_t *solver, 
             } else {
                 h_abs *= max(MIN_FACTOR, SAFETY * pow(error_norm, ERROR_EXP));
                 step_rejected = true;
-            }
-
-            if (progress) {
-                clock_gettime(CLOCK_MONOTONIC, &finish);
-                double elapsed = (finish.tv_sec - start.tv_sec);
-                elapsed += (finish.tv_nsec - start.tv_nsec) / 1E9;
-                printf("\r%.2f / %.2f | run : %.2fs | left : %.2fs | step : %.2e | err : %.2e | %d | %d | %lu", t, tf, elapsed, (tf/t - 1) * elapsed, h_abs, error_norm, step_accepted, step_rejected, real_steps);
-                fflush(stdout);
             }
         }
         if (step_count < save_limit && direction * (t_new - saved[step_count-1][y_size]) > save_interval) {
