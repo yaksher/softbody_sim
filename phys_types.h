@@ -69,7 +69,7 @@ typedef struct Object {
   size_t init_mass_i;
   size_t i;
   int x_s, y_s, z_s;
-  int *collide;
+  size_t *collide;
   size_t n_collide;
   bool springs_free;
   bool masses_free;
