@@ -1,7 +1,10 @@
 #ifndef PHYS_GLOBALS_H
 #define PHYS_GLOBALS_H
+#include <pthread.h>
+
 #include "phys_types.h"
 const size_t DIMS = 3; // Number of dimension the simulation exists in.
+const size_t NUM_THREADS = 16;
 // double g[DIMS] = {0, 0, 0};
 // double g[DIMS] = {0, 0, -10};
 

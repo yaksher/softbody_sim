@@ -228,7 +228,7 @@ int populate_objects() {
   return n_masses * DIMS * 2;
 }
 #elif defined(BOX_ON_BOX)
-int populate_objects(Data *data) {
+size_t populate_objects(Data *data) {
   printf("Creating objects\n");
   double k = 3000;
   double f = 0.05;
