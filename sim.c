@@ -206,7 +206,7 @@ void initial_state(double* out, int y_size, Data *data) {
 err_code_t deriv(double t, double *y, size_t y_size, double *out, void *_data) {
   Data *data = _data;
   (void) t; // system is time invariant
-  #ifndef NO_OBJECTS
+
   int vel_offset = y_size / 2;
   double *vels = y + vel_offset;
   data->accelerations = out + vel_offset;
@@ -258,47 +258,11 @@ err_code_t deriv(double t, double *y, size_t y_size, double *out, void *_data) {
   }
   memcpy(out, vels, vel_offset * sizeof(double));
   return 0;
-  #else
-  for (size_t i = 0; i < n_masses; i++) {
-    for (size_t d = 0; d < DIMS; d++) {
-      masses[i].pos[d] = y[i * DIMS + d];
-      masses[i].vel[d] = y[y_size / 2 + i * DIMS + d];
-      masses[i].a[d] = g[d] * points[i].g_mult;
-    }
-  }
-  for (size_t i = 0; i < n_springs; i++) {
-    apply_force(springs[i]);
-  }
-  //#define POINT_COLLISIONS
-  #ifdef POINT_COLLISIONS
-  void *kd = kd_create(DIMS);
-  for (size_t i = 0; i < n_points; i++) {
-    kd_insert(kd, points[i].pos, points + i);
-  }
-  for (size_t i = 0; i < n_points; i++) {
-    collide_set(points[i], kd_nearest_range(kd, points[i].pos, COLLISION_THRESHOLD));
-  }
-  for (size_t i = 0; i < n_spheres; i++) {
-    collide_set(spheres[i], kd_nearest_range(kd, spheres[i].pos, spheres[i].r + COLLISION_THRESHOLD));
-  }
-  kd_free(kd);
-  #else
-  for (size_t i = 0; i < n_spheres; i++) {
-    collide(spheres + i, masses, n_masses);
-  }
-  #endif
-  for (size_t i = 0; i < n_masses; i++) {
-    for (size_t d = 0; d < DIMS; d++) {
-      out[i * DIMS + d] = y[(n_masses + i) * DIMS + d];
-      out[(n_masses + i) * DIMS + d] = masses[i].a[d];
-    }
-  }
-  #endif
 }
 
 void save_data(double** solved, size_t frames, size_t y_size, double delta_t, Data *data) {
   FILE *out = fopen("sim_data.txt", "w+");
-  #ifndef NO_OBJECTS
+
   (void) delta_t;
   fprintf(out, "%lu\n%lu\n", DIMS, data->n_masses);
   for (size_t o = 0; o < data->n_objects; o++) {
@@ -318,36 +282,7 @@ void save_data(double** solved, size_t frames, size_t y_size, double delta_t, Da
     }
     fprintf(out, "%f\n", solved[i][y_size]);
   }
-  #else
-  fprintf(out, "%lu\n%lu\n", DIMS, n_masses);
-  for (size_t i = 0; i < n_masses - 1; i++) {
-    fprintf(out, "%lu,", masses[i].type);
-  }
-  fprintf(out, "%lu\n", masses[n_masses - 1].type);
 
-  if (n_spheres > 0) {
-    for (size_t i = 0; i < n_spheres - 1; i++) {
-      fprintf(out, "%f,", spheres[i].r);
-    }
-    fprintf(out, "%f\n", spheres[n_spheres - 1].r);
-  } else {
-    fprintf(out, "\n");
-  }
-
-  int inc = max(1, frames / (delta_t * RENDER_FRAMERATE * 10));
-  for (size_t i = 0; i < frames/inc; i++) {
-    for (size_t j = 0; j < y_size / 2; j ++) {
-      fprintf(out, "%f,", solved[i * inc][j]);
-    }
-    fprintf(out, "%f\n", solved[i * inc][y_size]);
-  }
-  if (inc - 1) {
-    for (size_t j = 0; j < y_size / 2; j ++) {
-      fprintf(out, "%f,", solved[frames - 1][j]);
-    }
-    fprintf(out, "%f\n", solved[frames - 1][y_size]);
-  }
-  #endif
   fclose(out);
 }
 
@@ -371,9 +306,7 @@ int main() {
   }
   //double solved[save_limit + 1][y_size + 1];
   fprintf(stderr, "beginning integration\n");
-  #ifdef USE_THREADS
-  make_threads();
-  #endif
+
   ivp_params_t ivp = (ivp_params_t) {
     .y0 = state_0,
     .y_size = y_size,
@@ -390,9 +323,7 @@ int main() {
     fprintf(stderr, "solve_ivp failed\n");
     return 1;
   }
-  #ifdef USE_THREADS
-  kill_threads();
-  #endif
+
   fprintf(stderr, "\ncomputation complete\n");
   size_t frames = solver.save_count;
   fprintf(stderr, "frames: %lu\n", frames);
