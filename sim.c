@@ -266,32 +266,6 @@ err_code_t deriv(double t, double *y, size_t y_size, double *out, void *_data) {
     return 0;
 }
 
-void save_data(double** solved, size_t frames, size_t y_size, double delta_t, Data *data) {
-    FILE *out = fopen("sim_data.txt", "w+");
-
-    (void) delta_t;
-    fprintf(out, "%lu\n%lu\n", DIMS, data->n_masses);
-    for (size_t o = 0; o < data->n_objects; o++) {
-        Object *obj = &data->objects[o];
-        for (size_t i = 0; i < obj->n_masses; i++) {
-            if (o != data->n_objects - 1 || i != obj->n_masses - 1) {
-                fprintf(out, "%f,%f,%f,", obj->masses[i].cr, obj->masses[i].cg, obj->masses[i].cb);
-            }
-        }
-    }
-    Mass *last = &data->objects[data->n_objects - 1].masses[data->objects[data->n_objects - 1].n_masses - 1];
-    fprintf(out, "%f,%f,%f\n", last->cr, last->cg, last->cb);
-    fprintf(out, "\n");
-    for (size_t i = 0; i < frames; i++) {
-        for (size_t j = 0; j < y_size / 2; j ++) {
-            fprintf(out, "%f,", solved[i][j]);
-        }
-        fprintf(out, "%f\n", solved[i][y_size]);
-    }
-
-    fclose(out);
-}
-
 typedef struct {
 	Data *data;
 	size_t id;
@@ -398,6 +372,33 @@ void thread_destroy(Data *data) {
 		free(data->thread_accelerations[i]);
 	}
 }
+
+void save_data(double** solved, size_t frames, size_t y_size, double delta_t, Data *data) {
+    FILE *out = fopen("sim_data.txt", "w+");
+
+    (void) delta_t;
+    fprintf(out, "%lu\n%lu\n", DIMS, data->n_masses);
+    for (size_t o = 0; o < data->n_objects; o++) {
+        Object *obj = &data->objects[o];
+        for (size_t i = 0; i < obj->n_masses; i++) {
+            if (o != data->n_objects - 1 || i != obj->n_masses - 1) {
+                fprintf(out, "%f,%f,%f,", obj->masses[i].cr, obj->masses[i].cg, obj->masses[i].cb);
+            }
+        }
+    }
+    Mass *last = &data->objects[data->n_objects - 1].masses[data->objects[data->n_objects - 1].n_masses - 1];
+    fprintf(out, "%f,%f,%f\n", last->cr, last->cg, last->cb);
+    fprintf(out, "\n");
+    for (size_t i = 0; i < frames; i++) {
+        for (size_t j = 0; j < y_size / 2; j ++) {
+            fprintf(out, "%f,", solved[i][j]);
+        }
+        fprintf(out, "%f\n", solved[i][y_size]);
+    }
+
+    fclose(out);
+}
+
 
 int main() {
     Data data;
