@@ -242,11 +242,7 @@ err_code_t solve_ivp(ivp_t *ivp, solver_params_t *solver) {
 }
 
 int sign(double x) {
-    if (x == 0) {
-        return 0;
-    } else {
-        return x / fabs(x);
-    }
+    return x > 0.0 - x < 0.0;
 }
 double max(double a, double b) {
     return a > b ? a : b;
