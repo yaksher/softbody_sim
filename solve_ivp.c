@@ -153,7 +153,7 @@ err_code_t solve_ivp(ivp_t *ivp, solver_params_t *solver) {
                 }
                 return -1;
             }
-            #else
+            #endif
             double h = max(MIN_STEP, min(h_abs, MAX_STEP)) * direction;
             t_new = t + h;
 
