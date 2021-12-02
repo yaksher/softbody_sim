@@ -187,12 +187,16 @@ err_code_t solve_ivp(ivp_t *ivp, solver_params_t *solver) {
             for (size_t i = 0; i < y_size; i++) {
                 y_new[i] = y[i] + h * y_delta[i];
             }
+            #ifdef UNSAFE
+            deriv(t + h, y_new, y_size, f_new, data);
+            #else
             if ((err_code = deriv(t + h, y_new, y_size, f_new, data))) {
                 for (size_t i = 1; i < n_stages; i++) {
                     free(K[i]);
                 }
                 return err_code;
             }
+            #endif
             double K_err[y_size];
             mat_vec_prod((const double **) K, E, y_size, n_stages + 1, K_err);
             double error_norm = 0;
