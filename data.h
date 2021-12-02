@@ -4,7 +4,7 @@
 
 #include "phys_types.h"
 const size_t DIMS = 3; // Number of dimension the simulation exists in.
-const size_t NUM_THREADS = 16;
+const size_t NUM_THREADS = 8;
 // double g[DIMS] = {0, 0, 0};
 // double g[DIMS] = {0, 0, -10};
 

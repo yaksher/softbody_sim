@@ -13,11 +13,12 @@
 #include "data.h"
 #include "initialize.h"
 
-#define WITH_MUT(MUT, CODE...) \
-do {						   \
-	pthread_mutex_lock(MUT);   \
-	do {CODE} while (false);   \
-	pthread_mutex_unlock(MUT); \
+#define WITH_MUT(MUT, CODE...)    \
+do {						      \
+	pthread_mutex_t *mut = (MUT); \
+	pthread_mutex_lock(mut);      \
+	do {CODE} while (false);      \
+	pthread_mutex_unlock(mut);    \
 } while (false);
 
 // #define DEBUG
@@ -218,33 +219,35 @@ err_code_t deriv(double t, double *y, size_t y_size, double *out, void *_data) {
             data->accelerations[i * DIMS + d] = data->g[d] * data->masses[i]->g_mult;
         }
     }
-    for (size_t o = 0; o < data->n_objects; o++) {
-        Object *obj = &data->objects[o];
-        if (data->n_objects > 1) {
-            obj->kd = kd_create(DIMS);
-            for (size_t i = 0; i < obj->n_collide; i++) {
-                kd_insert(obj->kd, obj->masses[obj->collide[i]].pos, obj->masses + obj->collide[i]);
-            }
-        }
-    }
-    for (size_t o1 = 0; o1 < data->n_objects; o1++) {
-        Object *obj1 = &data->objects[o1];
-        /*for (size_t i = 0; i < obj1->n_springs; i++) {
-            if ((spring_err = apply_force(obj1->springs[i]))) {
-                return spring_err;
-            }
-        }*/
-        for (size_t o2 = o1 + 1; o2 < data->n_objects; o2++) {
-            for (size_t i = 0; i < obj1->n_collide; i++) {
-                Object *obj2 = &data->objects[o2];
-                collide_set(obj1->masses + obj1->collide[i],
-                    kd_nearest_range(obj2->kd,
-                        obj1->masses[obj1->collide[i]].pos,
-                        COLLISION_THRESHOLD + obj1->masses[obj1->collide[i]].r),
-                    COLLISION_THRESHOLD, data);
-            }
-        }
-    }
+	if (data->n_objects > 1) {
+		for (size_t o = 0; o < data->n_objects; o++) {
+			Object *obj = &data->objects[o];
+			if (data->n_objects > 1) {
+				obj->kd = kd_create(DIMS);
+				for (size_t i = 0; i < obj->n_collide; i++) {
+					kd_insert(obj->kd, obj->masses[obj->collide[i]].pos, obj->masses + obj->collide[i]);
+				}
+			}
+		}
+		for (size_t o1 = 0; o1 < data->n_objects; o1++) {
+			Object *obj1 = &data->objects[o1];
+			/*for (size_t i = 0; i < obj1->n_springs; i++) {
+				if ((spring_err = apply_force(obj1->springs[i]))) {
+					return spring_err;
+				}
+			}*/
+			for (size_t o2 = o1 + 1; o2 < data->n_objects; o2++) {
+				for (size_t i = 0; i < obj1->n_collide; i++) {
+					Object *obj2 = &data->objects[o2];
+					collide_set(obj1->masses + obj1->collide[i],
+						kd_nearest_range(obj2->kd,
+							obj1->masses[obj1->collide[i]].pos,
+							COLLISION_THRESHOLD + obj1->masses[obj1->collide[i]].r),
+						COLLISION_THRESHOLD, data);
+				}
+			}
+		}
+	}
     if (data->n_objects > 1) {
         for (size_t o = 0; o < data->n_objects; o++) {
             kd_free(data->objects[o].kd);
@@ -308,12 +311,14 @@ void *thread_worker(void *arg) {
 			}
 		}
 
-		// indicate completion
-		WITH_MUT(&data->mut, data->signal--;)
-		pthread_cond_broadcast(&data->cond_masses);
-
-		// wait for all threads to be done
 		WITH_MUT(&data->mut,
+			// indicate completion
+			data->signal--;
+			if (data->signal <= NUM_THREADS) {
+				pthread_cond_broadcast(&data->cond_masses);
+			}
+
+			// wait for all threads to be done
 			while (data->signal > NUM_THREADS) {
 				pthread_cond_wait(&data->cond_masses, &data->mut);
 			}
@@ -406,7 +411,7 @@ int main() {
     memset(&data, 0, sizeof(data));
     data.g[2] = -10.0;
 
-    const double t0 = 0, tf = 5;
+    const double t0 = 0, tf = 20;
     const double delta_t = tf - t0;
     size_t y_size = populate_objects(&data);
     const size_t save_limit = RENDER_FRAMERATE * delta_t * 10;

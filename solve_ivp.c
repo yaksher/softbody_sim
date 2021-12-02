@@ -6,6 +6,10 @@
 #include <time.h>
 #include "vec_funcs.h"
 
+// if set, will omit run time value checking for minor speedups
+// will simply fail silently in undefined ways if something goes wrong
+#define UNSAFE
+
 const double MIN_FACTOR = 0.2;
 const double MAX_FACTOR = 10;
 const double MAX_STEP = 0.1;
@@ -43,10 +47,14 @@ err_code_t solve_ivp(ivp_t *ivp, solver_params_t *solver) {
     int direction = sign(tf - t0);
 
     double f0[y_size];
+    #ifdef UNSAFE
+    deriv(t0, y0, y_size, f0, data);
+    #else
     err_code_t err_code;
     if ((err_code = deriv(t0, y0, y_size, f0, data))) {
         return err_code;
     }
+    #endif
     double scale[y_size];
     double d0 = 0;
     double d1 = 0;
@@ -72,9 +80,13 @@ err_code_t solve_ivp(ivp_t *ivp, solver_params_t *solver) {
         y1[i] = y0[i] + h0 * direction * f0[i];
     }
     double f1[y_size];
+    #ifdef UNSAFE
+    deriv(t0 + h0 * direction, y1, y_size, f1, data);
+    #else
     if ((err_code = deriv(t0 + h0 * direction, y1, y_size, f1, data))) {
         return err_code;
     }
+    #endif
     double d2 = 0;
     for (size_t i = 0; i < y_size; i++) {
         double fdif_scale = (f1[i] - f0[i]) / scale[i];
@@ -133,6 +145,7 @@ err_code_t solve_ivp(ivp_t *ivp, solver_params_t *solver) {
         bool step_accepted = false;
         bool step_rejected = false;
         while (!step_accepted) {
+            #ifndef UNSAFE
             if (h_abs < min_step) {
                 fprintf(stderr, "Step %lu too small\n", step_count);
                 for (size_t i = 1; i < n_stages; i++) {
@@ -140,6 +153,7 @@ err_code_t solve_ivp(ivp_t *ivp, solver_params_t *solver) {
                 }
                 return -1;
             }
+            #else
             double h = max(MIN_STEP, min(h_abs, MAX_STEP)) * direction;
             t_new = t + h;
 
@@ -157,12 +171,16 @@ err_code_t solve_ivp(ivp_t *ivp, solver_params_t *solver) {
                 for (size_t i = 0; i < y_size; i++) {
                     ydy[i] = y[i] + dy[i] * h;
                 }
+                #ifdef UNSAFE
+                deriv(t + c * h, ydy, y_size, K[s], data);
+                #else
                 if ((err_code = deriv(t + c * h, ydy, y_size, K[s], data))) {
                     for (size_t i = 1; i < n_stages; i++) {
                         free(K[i]);
                     }
                     return err_code;
                 }
+                #endif
             }
             double y_delta[y_size];
             mat_vec_prod((const double **) K, B, y_size, n_stages, y_delta);
@@ -186,6 +204,7 @@ err_code_t solve_ivp(ivp_t *ivp, solver_params_t *solver) {
                 error_norm += K_err_scale * K_err_scale;
             }
             error_norm = sqrt(error_norm / y_size);
+            #ifndef UNSAFE
             if (isnan(error_norm)) {
                 fprintf(stderr, "\nERROR. NAN ENCOUNTERED\n");
                 for (size_t i = 1; i < n_stages; i++) {
@@ -193,6 +212,7 @@ err_code_t solve_ivp(ivp_t *ivp, solver_params_t *solver) {
                 }
                 return 3;
             }
+            #endif
             if (error_norm < 1 || h_abs <= MIN_STEP * MIN_STEP_FPE_MARGIN) {
                 double factor;
                 if (error_norm == 0) {
