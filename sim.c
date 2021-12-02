@@ -230,11 +230,6 @@ err_code_t deriv(double t, double *y, size_t y_size, double *out, void *_data) {
 	}
 	for (size_t o1 = 0; o1 < data->n_objects; o1++) {
 		Object *obj1 = &data->objects[o1];
-		/*for (size_t i = 0; i < obj1->n_springs; i++) {
-			if ((spring_err = apply_force(obj1->springs[i]))) {
-				return spring_err;
-			}
-		}*/
 		for (size_t o2 = o1 + 1; o2 < data->n_objects; o2++) {
 			for (size_t i = 0; i < obj1->n_collide; i++) {
 				Object *obj2 = &data->objects[o2];
