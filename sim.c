@@ -222,29 +222,27 @@ err_code_t deriv(double t, double *y, size_t y_size, double *out, void *_data) {
 	if (data->n_objects > 1) {
 		for (size_t o = 0; o < data->n_objects; o++) {
 			Object *obj = &data->objects[o];
-			if (data->n_objects > 1) {
-				obj->kd = kd_create(DIMS);
-				for (size_t i = 0; i < obj->n_collide; i++) {
-					kd_insert(obj->kd, obj->masses[obj->collide[i]].pos, obj->masses + obj->collide[i]);
-				}
+			obj->kd = kd_create(DIMS);
+			for (size_t i = 0; i < obj->n_collide; i++) {
+				kd_insert(obj->kd, obj->masses[obj->collide[i]].pos, obj->masses + obj->collide[i]);
 			}
 		}
-		for (size_t o1 = 0; o1 < data->n_objects; o1++) {
-			Object *obj1 = &data->objects[o1];
-			/*for (size_t i = 0; i < obj1->n_springs; i++) {
-				if ((spring_err = apply_force(obj1->springs[i]))) {
-					return spring_err;
-				}
-			}*/
-			for (size_t o2 = o1 + 1; o2 < data->n_objects; o2++) {
-				for (size_t i = 0; i < obj1->n_collide; i++) {
-					Object *obj2 = &data->objects[o2];
-					collide_set(obj1->masses + obj1->collide[i],
-						kd_nearest_range(obj2->kd,
-							obj1->masses[obj1->collide[i]].pos,
-							COLLISION_THRESHOLD + obj1->masses[obj1->collide[i]].r),
-						COLLISION_THRESHOLD, data);
-				}
+	}
+	for (size_t o1 = 0; o1 < data->n_objects; o1++) {
+		Object *obj1 = &data->objects[o1];
+		/*for (size_t i = 0; i < obj1->n_springs; i++) {
+			if ((spring_err = apply_force(obj1->springs[i]))) {
+				return spring_err;
+			}
+		}*/
+		for (size_t o2 = o1 + 1; o2 < data->n_objects; o2++) {
+			for (size_t i = 0; i < obj1->n_collide; i++) {
+				Object *obj2 = &data->objects[o2];
+				collide_set(obj1->masses + obj1->collide[i],
+					kd_nearest_range(obj2->kd,
+						obj1->masses[obj1->collide[i]].pos,
+						COLLISION_THRESHOLD + obj1->masses[obj1->collide[i]].r),
+					COLLISION_THRESHOLD, data);
 			}
 		}
 	}
