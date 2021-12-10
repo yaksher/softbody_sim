@@ -186,8 +186,9 @@ void collide_set(Mass *self, void *others, double collision_threshold, Data *dat
             double F = collision_threshold / r_diff - 1;
             double mu = self->mu + other->mu;
             for (size_t d = 0; d < DIMS; d++) {
-                data->accelerations[self->i * DIMS + d] -= self->mobile * F * (r_vec[d] / dist - mu * v_orth[d] / v_orth_size) / self->m;
-                data->accelerations[other->i * DIMS + d] += other->mobile * F * (r_vec[d] / dist - mu * v_orth[d] / v_orth_size) / other->m;
+				double F_d = F * (r_vec[d] / dist - mu * v_orth[d] / v_orth_size);
+                data->accelerations[self->i * DIMS + d] -= self->mobile * F_d / self->m;
+                data->accelerations[other->i * DIMS + d] += other->mobile * F_d / other->m;
             }
         }
     }
