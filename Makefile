@@ -1,6 +1,6 @@
 CC = clang
 CFLAGS = -g -pthread -Wall -Wextra -Ofast -march=native #-fsanitize=thread# -fsanitize=address
-DEPS = solve_ivp.h kdtree.h vec_funcs.h constructors.h phys_types.h data.h initialize.h
+DEPS = solve_ivp.h kdtree.h vec_funcs.h constructors.h phys_types.h data.h initialize.h threading.h
 OBJ = sim.o solve_ivp.o kdtree.o vec_funcs.o
 
 %.o: %.c $(DEPS)

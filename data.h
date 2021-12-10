@@ -1,42 +1,16 @@
 #ifndef PHYS_GLOBALS_H
 #define PHYS_GLOBALS_H
-#include <pthread.h>
 
 #include "phys_types.h"
+#include "threading.h"
 const size_t DIMS = 3; // Number of dimension the simulation exists in.
-const size_t NUM_THREADS = 8;
-// double g[DIMS] = {0, 0, 0};
-// double g[DIMS] = {0, 0, -10};
 
-// int mass_i = 0;
-// int obj_i = 0;
-// int spring_i = 0;
-
-// int n_points = 0;
-// int n_springs = 0;
-// int n_spheres = 0;
-// int n_masses = 0;
-// int n_objects = 0;
-// int n_collides = 0;
-// Mass *points = NULL;
-// Spring *springs = NULL;
-// Mass *spheres = NULL;
-// Mass **masses = NULL;
-// Object *objects = NULL;
-// int *collides = NULL;
-
-typedef struct Data {
+typedef struct {
     double g[DIMS];
 
     double *accelerations;
 
-    pthread_t threads[NUM_THREADS];
-    double *thread_accelerations[NUM_THREADS];
-    pthread_cond_t cond_springs;
-    pthread_cond_t cond_done;
-    pthread_cond_t cond_masses;
-    pthread_mutex_t mut;
-    size_t signal;
+    thread_handler_t thread_handler;
 
     size_t mass_i;
     size_t obj_i;

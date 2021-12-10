@@ -93,7 +93,7 @@ size_t populate_objects(Data *data) {
 }
 #elif defined(ONE_BOX)
 size_t populate_objects(Data *data) {
-    printf("Creating objects\n");
+    fprintf(stderr, "Creating objects\n");
     double k = 20;
     double f = 0.05;
     double r = 0.7;
@@ -110,7 +110,7 @@ size_t populate_objects(Data *data) {
     data->n_masses = data->objects[0].n_masses;
     data->n_springs = data->objects[0].n_springs;
     data->n_points = data->n_masses;
-    printf("populated objects\n");
+    fprintf(stderr, "populated objects\n");
     //flatten_springs();
     flatten_objects(data);
     return data->n_masses * DIMS * 2;

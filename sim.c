@@ -3,23 +3,16 @@
 #include <stdbool.h>
 #include <math.h>
 #include <string.h>
+#include <assert.h>
+#include <time.h>
 
 #include "vec_funcs.h"
 #include "phys_types.h"
-#include "constructors.h"
 #include "solve_ivp.h"
 #include "sim.h"
 #include "kdtree.h"
 #include "data.h"
 #include "initialize.h"
-
-#define WITH_MUT(MUT, CODE...)    \
-do {						      \
-	pthread_mutex_t *mut = (MUT); \
-	pthread_mutex_lock(mut);      \
-	do {CODE} while (false);      \
-	pthread_mutex_unlock(mut);    \
-} while (false);
 
 // #define DEBUG
 
@@ -209,6 +202,7 @@ err_code_t deriv(double t, double *y, size_t y_size, double *out, void *_data) {
     Data *data = _data;
     (void) t; // system is time invariant
 
+
     int vel_offset = y_size / 2;
     double *vels = y + vel_offset;
     data->accelerations = out + vel_offset;
@@ -248,16 +242,15 @@ err_code_t deriv(double t, double *y, size_t y_size, double *out, void *_data) {
         }
     }
 
-	// signal worker threads to start
-	WITH_MUT(&data->mut, data->signal = NUM_THREADS * 2;)
-	pthread_cond_broadcast(&data->cond_springs);
+    // signal worker threads to start
+    set_flag(&data->thread_handler, START_SIGNAL);
+
+    // synchronize threads when they're done with accelerations
+    wait_signals(&data->thread_handler, COLLECT_SIGNAL);
+    set_flag(&data->thread_handler, COLLECT_SIGNAL);
 
 	// wait for threads to finish
-	WITH_MUT(&data->mut,
-		while (data->signal != 0) {
-			pthread_cond_wait(&data->cond_done, &data->mut);
-		}
-	)
+	wait_signals(&data->thread_handler, DONE_SIGNAL);
 
     memcpy(out, vels, vel_offset * sizeof(double));
     return 0;
@@ -288,87 +281,65 @@ void *thread_worker(void *arg) {
 	free(arg);
 	while (true) {
 		// wait for the start of a derive
-		WITH_MUT(&data->mut,
-			while (data->signal <= NUM_THREADS) {
-				pthread_cond_wait(&data->cond_springs, &data->mut);
-			}
-			if (data->signal >= SIZE_MAX - 2 * NUM_THREADS) {
-				pthread_mutex_unlock(&data->mut);
-				return NULL;
-			}
-		)
+		wait_flag(&data->thread_handler, START_SIGNAL);
+		if (data->thread_handler.die_flag) {
+			return NULL;
+		}
 
 		// apply force for strings belonging to this thread
 		for (size_t i = start_springs; i < end_springs; i++) {
-			if (apply_force(data->springs[i], data->thread_accelerations[id])) {
+			if (apply_force(data->springs[i], data->thread_handler.thread_accelerations[id])) {
 				exit(1);
 			}
 		}
 
-		WITH_MUT(&data->mut,
-			// indicate completion
-			data->signal--;
-			if (data->signal <= NUM_THREADS) {
-				pthread_cond_broadcast(&data->cond_masses);
-			}
-
-			// wait for all threads to be done
-			while (data->signal > NUM_THREADS) {
-				pthread_cond_wait(&data->cond_masses, &data->mut);
-			}
-		)
+		// synchronization
+		set_signal(&data->thread_handler, COLLECT_SIGNAL, id);
+        wait_flag(&data->thread_handler, COLLECT_SIGNAL);
 
 		// tally up accelerations for each thread into main acceleration for thread's
 		// segment of masses
 		for (size_t tid = 0; tid < NUM_THREADS; tid++) {
 			for (size_t i = start_masses; i < end_masses; i++) {
-				data->accelerations[i] += data->thread_accelerations[tid][i];
+				data->accelerations[i] += data->thread_handler.thread_accelerations[tid][i];
 			}
-			memset(&data->thread_accelerations[tid][start_masses], 0,
+			memset(&data->thread_handler.thread_accelerations[tid][start_masses], 0,
 				   (end_masses - start_masses) * sizeof(double));
 		}
 
 		// indicate completion
-		WITH_MUT(&data->mut,
-			data->signal--;
-			if (data->signal == 0) {
-				pthread_cond_signal(&data->cond_done);
-			}
-		)
+		set_signal(&data->thread_handler, DONE_SIGNAL, id);
 	}
 }
 
 void thread_init(Data *data, size_t y_size) {
-    pthread_cond_init(&data->cond_springs, NULL);
-    pthread_cond_init(&data->cond_done, NULL);
-    pthread_cond_init(&data->cond_masses, NULL);
-    pthread_mutex_init(&data->mut, NULL);
-
 	for (size_t i = 0; i < NUM_THREADS; i++) {
-		data->thread_accelerations[i] = calloc(sizeof(double), y_size);
+		data->thread_handler.thread_accelerations[i] = calloc(sizeof(double), y_size);
 	}
+
+	set_all_signals(&data->thread_handler, DONE_SIGNAL);
 
     for (size_t i = 0; i < NUM_THREADS; i++) {
 		worker_arg_t *worker_arg = malloc(sizeof(worker_arg_t));
 		worker_arg->data = data;
 		worker_arg->id = i;
 		worker_arg->accel_size = y_size / 2;
-		pthread_create(&data->threads[i], NULL, thread_worker, worker_arg);
+		pthread_create(&data->thread_handler.threads[i], NULL, thread_worker, worker_arg);
     }
 }
 
 void thread_destroy(Data *data) {
-	WITH_MUT(&data->mut, data->signal = SIZE_MAX;)
-	pthread_cond_broadcast(&data->cond_springs);
-	pthread_cond_broadcast(&data->cond_masses);
+	assert(check_signals(&data->thread_handler, DONE_SIGNAL));
+	data->thread_handler.die_flag = true;
+
 	fprintf(stderr, "Joined:");
 	for (size_t i = 0; i < NUM_THREADS; i++) {
-		pthread_join(data->threads[i], NULL);
+		pthread_join(data->thread_handler.threads[i], NULL);
 		fprintf(stderr, " %lu", i);
 	}
 	fprintf(stderr, "\n");
 	for (size_t i = 0; i < NUM_THREADS; i++) {
-		free(data->thread_accelerations[i]);
+		free(data->thread_handler.thread_accelerations[i]);
 	}
 }
 
