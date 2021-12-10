@@ -16,7 +16,7 @@
 
 // #define DEBUG
 
-const double RENDER_FRAMERATE = 50.0; // At most 10 * timeinterval * framerate frames will be saved by the code for interpolation.
+const double RENDER_FRAMERATE = 25.0; // At most 10 * timeinterval * framerate frames will be saved by the code for interpolation.
 const double COLLISION_THRESHOLD = 1.0/5.0;
 
 int apply_force(Spring spring, double *accelerations) {
@@ -31,7 +31,7 @@ int apply_force(Spring spring, double *accelerations) {
     }
 	#endif
     double diff[DIMS];
-    //#define PROPER_FRICTION
+    #define PROPER_FRICTION
     #ifdef PROPER_FRICTION
     double r_dot_v = 0, r_dot_self = 0;
     for (size_t d = 0; d < DIMS; d++) {
@@ -46,10 +46,9 @@ int apply_force(Spring spring, double *accelerations) {
     for (size_t d = 0; d < DIMS; d++) {
         double unit_d = diff[d] / dist;
         double v_r_proj_d = diff[d] * r_dot_v / r_dot_self;
-        double v_diff_d = p2->vel[d] - p1->vel[d];
         double F_d = - unit_d * deflection * spring.k - v_r_proj_d * spring.f;
-        p1->a[d] -= F_d * p1->mobile / p1->m;
-        p2->a[d] += F_d * p2->mobile / p2->m;
+        accelerations[p1->i * DIMS + d] -= F_d * p1->mobile / p1->m;
+        accelerations[p2->i * DIMS + d] += F_d * p2->mobile / p2->m;
     }
     #else
     double r_dot_self = 0;
@@ -347,7 +346,7 @@ void save_data(double** solved, size_t frames, size_t y_size, double delta_t, Da
     FILE *out = fopen("sim_data.txt", "w+");
 
     (void) delta_t;
-    fprintf(out, "%lu\n%lu\n", DIMS, data->n_masses);
+    fprintf(out, "%.2f\n%lu\n%lu\n", RENDER_FRAMERATE, DIMS, data->n_masses);
     for (size_t o = 0; o < data->n_objects; o++) {
         Object *obj = &data->objects[o];
         for (size_t i = 0; i < obj->n_masses; i++) {

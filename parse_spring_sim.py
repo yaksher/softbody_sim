@@ -20,19 +20,20 @@ class LinDense(DenseOutput):
 
 f = open("sim_data.txt", "r")
 lines = f.readlines()
-dims = int(lines[0])
-n_objs = int(lines[1])
+fps = float(lines[0])
+dims = int(lines[1])
+n_objs = int(lines[2])
 #obj_types = [int(x) for x in lines[2].split(",")]
-obj_colors_line = [float(x) for x in lines[2].split(",")]
+obj_colors_line = [float(x) for x in lines[3].split(",")]
 obj_colors = [tuple(obj_colors_line[i:i+3]) for i in range(0, 3 * n_objs, 3)]
 try:
-    sphere_radii = [float(x) for x in lines[3].split(",")]
+    sphere_radii = [float(x) for x in lines[4].split(",")]
 except ValueError:
     sphere_radii = []
 n_spheres = len(sphere_radii)
 n_points = n_objs - n_spheres
 data = []
-for line in lines[4:]:
+for line in lines[5:]:
     data.append([float(x) for x in line.split(",")])
 
 t_s = []
@@ -49,7 +50,7 @@ sol = OdeSolution(t_s, introps)
 
 t0 = t_s[0]  # initial time
 tf = t_s[-1] # final time
-nframes = int(50*(tf - t0))
+nframes = int(fps*(tf - t0))
 t = np.linspace(t0, tf, nframes)
 
 sph_count = 15
@@ -120,7 +121,7 @@ def animate(i):
         graph._offsets3d = tuple(frame)
         return ax,
 
-interval = 20 #ms
+interval = 1000 / fps #ms
 nframes = int(tf/ (interval* 1e-3))
 pb2 = PB.ProgressBar(nframes + 1, bar_length = 10)
 ani = animation.FuncAnimation(fig, animate, frames=nframes, interval=interval, blit=False)
