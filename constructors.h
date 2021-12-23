@@ -123,38 +123,38 @@ Object mk_Box(Data *data,
             for (int y = 0; y < y_s; y++) {
                 if (z) {
                     box.springs[i++] = mk_eq_Spring_fr_mass(data,
-                        BOX_IND(x, y, z        ),
+                        BOX_IND(x, y, z    ),
                         BOX_IND(x, y, z - 1),
                         k, f, box.masses);
                 }
                 if (x) {
                     box.springs[i++] = mk_eq_Spring_fr_mass(data,
-                        BOX_IND(x        , y, z),
+                        BOX_IND(x    , y, z),
                         BOX_IND(x - 1, y, z),
                         k, f, box.masses);
                 }
                 if (y) {
                     box.springs[i++] = mk_eq_Spring_fr_mass(data,
-                        BOX_IND(x, y        , z),
+                        BOX_IND(x, y    , z),
                         BOX_IND(x, y - 1, z),
                         k, f, box.masses);
                 }
                 if (x && y && z) {
                     box.springs[i++] = mk_eq_Spring_fr_mass(data,
-                        BOX_IND(x        , y        , z        ),
+                        BOX_IND(x    , y    , z    ),
                         BOX_IND(x - 1, y - 1, z - 1),
                         k, f, box.masses);
                     box.springs[i++] = mk_eq_Spring_fr_mass(data,
-                        BOX_IND(x        , y        , z - 1),
-                        BOX_IND(x - 1, y - 1, z        ),
+                        BOX_IND(x    , y    , z - 1),
+                        BOX_IND(x - 1, y - 1, z    ),
                         k, f, box.masses);
                     box.springs[i++] = mk_eq_Spring_fr_mass(data,
-                        BOX_IND(x        , y - 1, z        ),
-                        BOX_IND(x - 1, y        , z - 1),
+                        BOX_IND(x    , y - 1, z    ),
+                        BOX_IND(x - 1, y    , z - 1),
                         k, f, box.masses);
                     box.springs[i++] = mk_eq_Spring_fr_mass(data,
-                        BOX_IND(x - 1, y        , z        ),
-                        BOX_IND(x        , y - 1, z - 1),
+                        BOX_IND(x - 1, y    , z    ),
+                        BOX_IND(x    , y - 1, z - 1),
                         k, f, box.masses);
                 }
             }
