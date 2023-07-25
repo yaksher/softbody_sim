@@ -28,16 +28,16 @@ err_code_t solve_ivp(ivp_t *ivp, solver_params_t *solver) {
      * Returns an array of y value arrays concatenated with time_stamp for every
      * step taken. Truncates at save_limit.
      */
-	// unpack ivp
+    // unpack ivp
     deriv_t deriv = ivp->deriv;
     void *data = ivp->data;
-	double t0 = ivp->t0, tf = ivp->tf, *y0 = ivp->y0;
-	size_t y_size = ivp->y_size;
+    double t0 = ivp->t0, tf = ivp->tf, *y0 = ivp->y0;
+    size_t y_size = ivp->y_size;
 
-	// unpack solver params
-	size_t save_limit = solver->save_limit;
-	double **saved = solver->saved;
-	bool progress = solver->progress;
+    // unpack solver params
+    size_t save_limit = solver->save_limit;
+    double **saved = solver->saved;
+    bool progress = solver->progress;
 
     double save_interval = fabs(tf - t0) / save_limit;
     struct timespec start, finish;
@@ -255,7 +255,7 @@ err_code_t solve_ivp(ivp_t *ivp, solver_params_t *solver) {
         free(K[i]);
     }
     // *saved[save_limit] = (double) step_count;
-	solver->save_count = step_count;
+    solver->save_count = step_count;
     if (!progress) {
         clock_gettime(CLOCK_MONOTONIC, &finish);
         double elapsed = (finish.tv_sec - start.tv_sec);
